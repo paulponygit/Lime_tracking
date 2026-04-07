@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vélos Lime — Nice</title>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'DM Sans', 'Segoe UI', sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      z-index: 1000;
+      flex-shrink: 0;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: #00d26a;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .logo h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #e6edf3;
+      letter-spacing: -0.3px;
+    }
+
+    .logo span {
+      font-size: 13px;
+      color: #8b949e;
+      font-weight: 400;
+    }
+
+    .stats {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .stat {
+      text-align: right;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #00d26a;
+      line-height: 1;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+    }
+
+    .divider {
+      width: 1px;
+      height: 32px;
+      background: #30363d;
+    }
+
+    .refresh-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #8b949e;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #00d26a;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    #countdown {
+      font-weight: 600;
+      color: #e6edf3;
+      min-width: 28px;
+    }
+
+    #map {
+      flex: 1;
+    }
+
+    .leaflet-container {
+      background: #0d1117;
+    }
+
+    .cluster-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #00d26a;
+      color: #0d1117;
+      font-weight: 700;
+      font-size: 13px;
+      border-radius: 50%;
+      border: 3px solid #fff;
+      box-shadow: 0 2px 12px rgba(0,210,106,0.4);
+    }
+
+    .bike-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #00d26a;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      box-shadow: 0 2px 8px rgba(0,210,106,0.4);
+      font-size: 14px;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-size: 13px;
+      color: #8b949e;
+      z-index: 9999;
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🛴</div>
+    <div>
+      <h1>Lime Bikes — Nice</h1>
+      <span>Carte en temps réel</span>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-value" id="total-bikes">—</div>
+      <div class="stat-label">vélos disponibles</div>
+    </div>
+    <div class="divider"></div>
+    <div class="stat">
+      <div class="stat-value" id="total-clusters">—</div>
+      <div class="stat-label">zones</div>
+    </div>
+    <div class="divider"></div>
+    <div class="refresh-info">
+      <div class="dot"></div>
+      <span>Actualisation dans <span id="countdown">60</span>s</span>
+    </div>
+  </div>
+</header>
+
+<div id="map"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+window.addEventListener('DOMContentLoaded', function() {
+const API_URL = 'https://corsproxy.io/?url=' + encodeURIComponent('https://data.lime.bike/api/partners/v2/gbfs/nice/free_bike_status');
+const CLUSTER_DISTANCE_M = 20;
+const REFRESH_INTERVAL = 60;
+
+const map = L.map('map', {
+  center: [43.7102, 7.2620],
+  zoom: 14,
+  zoomControl: true,
+  attributionControl: false
+});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  maxZoom: 19
+}).addTo(map);
+
+let markers = [];
+let countdownVal = REFRESH_INTERVAL;
+let countdownTimer = null;
+
+function haversineM(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function clusterBikes(bikes) {
+  const used = new Array(bikes.length).fill(false);
+  const groups = [];
+
+  for (let i = 0; i < bikes.length; i++) {
+    if (used[i]) continue;
+    const group = [bikes[i]];
+    used[i] = true;
+    for (let j = i + 1; j < bikes.length; j++) {
+      if (used[j]) continue;
+      const d = haversineM(bikes[i].lat, bikes[i].lon, bikes[j].lat, bikes[j].lon);
+      if (d <= CLUSTER_DISTANCE_M) {
+        group.push(bikes[j]);
+        used[j] = true;
+      }
+    }
+    groups.push(group);
+  }
+  return groups;
+}
+
+function avgPos(group) {
+  const lat = group.reduce((s, b) => s + b.lat, 0) / group.length;
+  const lon = group.reduce((s, b) => s + b.lon, 0) / group.length;
+  return [lat, lon];
+}
+
+function clearMarkers() {
+  markers.forEach(m => m.remove());
+  markers = [];
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+async function fetchAndRender() {
+  try {
+    const res = await fetch(API_URL);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+
+    const bikes = (json.data?.bikes || []).map(b => ({
+      lat: b.lat,
+      lon: b.lon,
+      id: b.bike_id,
+      type: b.vehicle_type || 'bike'
+    }));
+
+    if (!bikes.length) {
+      showToast('Aucun vélo trouvé dans les données.');
+      return;
+    }
+
+    clearMarkers();
+    const groups = clusterBikes(bikes);
+
+    groups.forEach(group => {
+      const [lat, lon] = avgPos(group);
+      const count = group.length;
+      const size = count === 1 ? 28 : Math.min(28 + count * 4, 52);
+
+      const icon = L.divIcon({
+        className: '',
+        html: count === 1
+          ? `<div class="bike-icon" style="width:${size}px;height:${size}px;">🛴</div>`
+          : `<div class="cluster-icon" style="width:${size}px;height:${size}px;">${count}</div>`,
+        iconSize: [size, size],
+        iconAnchor: [size/2, size/2]
+      });
+
+      const label = count === 1
+        ? '1 vélo disponible'
+        : `${count} vélos disponibles`;
+
+      const m = L.marker([lat, lon], { icon })
+        .bindPopup(`<b>${label}</b><br><small>${lat.toFixed(5)}, ${lon.toFixed(5)}</small>`)
+        .addTo(map);
+
+      markers.push(m);
+    });
+
+    document.getElementById('total-bikes').textContent = bikes.length;
+    document.getElementById('total-clusters').textContent = groups.length;
+
+    showToast(`✓ ${bikes.length} vélos chargés`);
+
+  } catch (err) {
+    console.error(err);
+    showToast('Erreur de chargement — nouvelle tentative dans 60s');
+  }
+}
+
+function startCountdown() {
+  if (countdownTimer) clearInterval(countdownTimer);
+  countdownVal = REFRESH_INTERVAL;
+  document.getElementById('countdown').textContent = countdownVal;
+
+  countdownTimer = setInterval(() => {
+    countdownVal--;
+    document.getElementById('countdown').textContent = countdownVal;
+    if (countdownVal <= 0) {
+      countdownVal = REFRESH_INTERVAL;
+      fetchAndRender();
+    }
+  }, 1000);
+}
+
+fetchAndRender();
+startCountdown();
+}); // DOMContentLoaded
+</script>
+</body>
+</html>
