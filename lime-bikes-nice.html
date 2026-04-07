@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vélos Lime — Nice</title>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'DM Sans', 'Segoe UI', sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      z-index: 1000;
+      flex-shrink: 0;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: #00d26a;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .logo h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #e6edf3;
+      letter-spacing: -0.3px;
+    }
+
+    .logo span {
+      font-size: 13px;
+      color: #8b949e;
+      font-weight: 400;
+    }
+
+    .stats {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .stat { text-align: right; }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #00d26a;
+      line-height: 1;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+    }
+
+    .divider {
+      width: 1px;
+      height: 32px;
+      background: #30363d;
+    }
+
+    .refresh-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #8b949e;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #00d26a;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    #countdown {
+      font-weight: 600;
+      color: #e6edf3;
+      min-width: 28px;
+    }
+
+    #map { flex: 1; }
+
+    .leaflet-container { background: #0d1117; }
+
+    .cluster-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #00d26a;
+      color: #0d1117;
+      font-weight: 700;
+      font-size: 13px;
+      border-radius: 50%;
+      border: 3px solid #fff;
+      box-shadow: 0 2px 12px rgba(0,210,106,0.4);
+    }
+
+    .bike-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #00d26a;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      box-shadow: 0 2px 8px rgba(0,210,106,0.4);
+      font-size: 14px;
+    }
+
+    .user-dot {
+      width: 18px;
+      height: 18px;
+      background: #3b82f6;
+      border: 3px solid #fff;
+      border-radius: 50%;
+      box-shadow: 0 0 0 5px rgba(59,130,246,0.25);
+    }
+
+    .locate-btn {
+      position: absolute;
+      bottom: 90px;
+      right: 12px;
+      z-index: 1000;
+      width: 40px;
+      height: 40px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      transition: background 0.2s, border-color 0.2s;
+      user-select: none;
+    }
+    .locate-btn:hover { background: #21262d; border-color: #00d26a; }
+    .locate-btn.active { border-color: #3b82f6; background: #0c1a2e; }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-size: 13px;
+      color: #8b949e;
+      z-index: 9999;
+      opacity: 0;
+      transition: opacity 0.4s;
+      white-space: nowrap;
+    }
+
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🛴</div>
+    <div>
+      <h1>Lime Bikes — Nice</h1>
+      <span>Carte en temps réel</span>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-value" id="total-bikes">—</div>
+      <div class="stat-label">vélos disponibles</div>
+    </div>
+    <div class="divider"></div>
+    <div class="stat">
+      <div class="stat-value" id="total-clusters">—</div>
+      <div class="stat-label">zones</div>
+    </div>
+    <div class="divider"></div>
+    <div class="refresh-info">
+      <div class="dot"></div>
+      <span>Actualisation dans <span id="countdown">60</span>s</span>
+    </div>
+  </div>
+</header>
+
+<div id="map"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+window.addEventListener('DOMContentLoaded', function() {
+
+const API_URL = 'https://corsproxy.io/?url=' + encodeURIComponent('https://data.lime.bike/api/partners/v2/gbfs/nice/free_bike_status');
+const CLUSTER_DISTANCE_M = 20;
+const REFRESH_INTERVAL = 60;
+
+const map = L.map('map', {
+  center: [43.7102, 7.2620],
+  zoom: 14,
+  zoomControl: true,
+  attributionControl: false
+});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  maxZoom: 19
+}).addTo(map);
+
+// Bouton de géolocalisation
+const locateBtn = document.createElement('div');
+locateBtn.className = 'locate-btn';
+locateBtn.title = 'Ma position';
+locateBtn.innerHTML = '◎';
+document.getElementById('map').appendChild(locateBtn);
+
+let markers = [];
+let countdownVal = REFRESH_INTERVAL;
+let countdownTimer = null;
+let userMarker = null;
+let watchId = null;
+let locating = false;
+
+// --- Géolocalisation ---
+
+locateBtn.addEventListener('click', function() {
+  if (!navigator.geolocation) {
+    showToast('Géolocalisation non supportée par ce navigateur');
+    return;
+  }
+
+  if (locating) {
+    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    locating = false;
+    locateBtn.classList.remove('active');
+    locateBtn.innerHTML = '◎';
+    if (userMarker) { userMarker.remove(); userMarker = null; }
+    showToast('Position désactivée');
+    return;
+  }
+
+  locateBtn.innerHTML = '…';
+  showToast('Localisation en cours…');
+
+  watchId = navigator.geolocation.watchPosition(
+    function(pos) {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+
+      locating = true;
+      locateBtn.classList.add('active');
+      locateBtn.innerHTML = '◎';
+
+      const userIcon = L.divIcon({
+        className: '',
+        html: '<div class="user-dot"></div>',
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      });
+
+      if (userMarker) {
+        userMarker.setLatLng([lat, lon]);
+      } else {
+        userMarker = L.marker([lat, lon], { icon: userIcon, zIndexOffset: 1000 })
+          .bindPopup('<b>Vous êtes ici</b>')
+          .addTo(map);
+        map.setView([lat, lon], 16);
+      }
+    },
+    function(err) {
+      locateBtn.innerHTML = '◎';
+      locating = false;
+      const msgs = {
+        1: 'Permission refusée — autorise la localisation dans ton navigateur',
+        2: 'Position introuvable',
+        3: 'Délai dépassé'
+      };
+      showToast(msgs[err.code] || 'Erreur de géolocalisation');
+    },
+    { enableHighAccuracy: true, maximumAge: 10000 }
+  );
+});
+
+// --- Utilitaires ---
+
+function haversineM(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function clusterBikes(bikes) {
+  const used = new Array(bikes.length).fill(false);
+  const groups = [];
+  for (let i = 0; i < bikes.length; i++) {
+    if (used[i]) continue;
+    const group = [bikes[i]];
+    used[i] = true;
+    for (let j = i + 1; j < bikes.length; j++) {
+      if (used[j]) continue;
+      if (haversineM(bikes[i].lat, bikes[i].lon, bikes[j].lat, bikes[j].lon) <= CLUSTER_DISTANCE_M) {
+        group.push(bikes[j]);
+        used[j] = true;
+      }
+    }
+    groups.push(group);
+  }
+  return groups;
+}
+
+function avgPos(group) {
+  return [
+    group.reduce((s, b) => s + b.lat, 0) / group.length,
+    group.reduce((s, b) => s + b.lon, 0) / group.length
+  ];
+}
+
+function clearMarkers() {
+  markers.forEach(m => m.remove());
+  markers = [];
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// --- Chargement des vélos ---
+
+async function fetchAndRender() {
+  try {
+    const res = await fetch(API_URL);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+
+    const bikes = (json.data?.bikes || []).map(b => ({
+      lat: b.lat, lon: b.lon, id: b.bike_id
+    }));
+
+    if (!bikes.length) { showToast('Aucun vélo trouvé.'); return; }
+
+    clearMarkers();
+    const groups = clusterBikes(bikes);
+
+    groups.forEach(group => {
+      const [lat, lon] = avgPos(group);
+      const count = group.length;
+      const size = count === 1 ? 28 : Math.min(28 + count * 4, 52);
+
+      const icon = L.divIcon({
+        className: '',
+        html: count === 1
+          ? `<div class="bike-icon" style="width:${size}px;height:${size}px;">🛴</div>`
+          : `<div class="cluster-icon" style="width:${size}px;height:${size}px;">${count}</div>`,
+        iconSize: [size, size],
+        iconAnchor: [size/2, size/2]
+      });
+
+      const label = count === 1 ? '1 vélo disponible' : `${count} vélos disponibles`;
+      const m = L.marker([lat, lon], { icon })
+        .bindPopup(`<b>${label}</b><br><small>${lat.toFixed(5)}, ${lon.toFixed(5)}</small>`)
+        .addTo(map);
+      markers.push(m);
+    });
+
+    document.getElementById('total-bikes').textContent = bikes.length;
+    document.getElementById('total-clusters').textContent = groups.length;
+    showToast(`✓ ${bikes.length} vélos chargés`);
+
+  } catch (err) {
+    console.error(err);
+    showToast('Erreur de chargement — nouvelle tentative dans 60s');
+  }
+}
+
+function startCountdown() {
+  if (countdownTimer) clearInterval(countdownTimer);
+  countdownVal = REFRESH_INTERVAL;
+  document.getElementById('countdown').textContent = countdownVal;
+
+  countdownTimer = setInterval(() => {
+    countdownVal--;
+    document.getElementById('countdown').textContent = countdownVal;
+    if (countdownVal <= 0) {
+      countdownVal = REFRESH_INTERVAL;
+      fetchAndRender();
+    }
+  }, 1000);
+}
+
+fetchAndRender();
+startCountdown();
+
+}); // DOMContentLoaded
+</script>
+</body>
+</html>
