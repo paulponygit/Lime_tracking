@@ -380,7 +380,8 @@ function showToast(msg) {
 async function fetchWithFallback() {
   for (const proxy of PROXIES) {
     try {
-      const res = await fetch(proxy(LIME_URL), { signal: AbortSignal.timeout(8000) });
+      const bustUrl = LIME_URL + '?_=' + Date.now();
+      const res = await fetch(proxy(bustUrl), { signal: AbortSignal.timeout(8000), cache: 'no-store' });
       if (!res.ok) continue;
       const json = await res.json();
       return json;
