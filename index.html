@@ -232,11 +232,7 @@
 window.addEventListener('DOMContentLoaded', function() {
 
 const LIME_URL = 'https://data.lime.bike/api/partners/v2/gbfs/nice/free_bike_status';
-const PROXIES = [
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-  url => `https://proxy.cors.sh/${url}`,
-];
+const PROXY_URL = 'https://weathered-hill-f45f.paul-marchand.workers.dev/';
 const CLUSTER_DISTANCE_M = 20;
 const REFRESH_INTERVAL = 60;
 
@@ -380,8 +376,7 @@ function showToast(msg) {
 async function fetchWithFallback() {
   for (const proxy of PROXIES) {
     try {
-      const bustUrl = LIME_URL + '?_=' + Date.now();
-      const res = await fetch(proxy(bustUrl), { signal: AbortSignal.timeout(8000), cache: 'no-store' });
+      const res = await fetch(proxy(LIME_URL), { signal: AbortSignal.timeout(8000), cache: 'no-store' });
       if (!res.ok) continue;
       const json = await res.json();
       return json;
